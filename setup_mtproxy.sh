@@ -200,8 +200,14 @@ echo -e "${GREEN}[✓] Движок готов: $MTG_VER${NC}"
 
 # ── Generate FakeTLS secret ──────────────────
 echo -e "${BPINK}[→] Генерирую FakeTLS secret (маскировка под $DOMAIN)...${NC}"
-SECRET=$("$INSTALL_DIR/mtg" generate-secret --hex "$DOMAIN" 2>/dev/null \
-      || "$INSTALL_DIR/mtg" generate-secret "$DOMAIN" 2>/dev/null)
+
+# mtg v2: generate-secret --hex <domain>
+SECRET=$("$INSTALL_DIR/mtg" generate-secret --hex "$DOMAIN" 2>/dev/null)
+
+# Если --hex не поддерживается (старая версия) — пробуем без флага
+if [[ -z "$SECRET" ]]; then
+  SECRET=$("$INSTALL_DIR/mtg" generate-secret "$DOMAIN" 2>/dev/null)
+fi
 
 if [[ -z "$SECRET" ]]; then
   echo -e "${RED}[!] Не удалось сгенерировать secret.${NC}"
@@ -215,6 +221,7 @@ ufw allow "$PORT/tcp" >/dev/null 2>&1 || true
 echo -e "${GREEN}[✓] Порт $PORT открыт${NC}"
 
 # ── Create systemd service ───────────────────
+# mtg v2: используем simple-run <bind-to> <secret> (без конфиг-файла)
 echo -e "${BPINK}[→] Создаю systemd сервис...${NC}"
 
 cat > /etc/systemd/system/${SERVICE_NAME}.service <<EOF
@@ -225,7 +232,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=${INSTALL_DIR}/mtg run ${SECRET} --bind 0.0.0.0:${PORT}
+ExecStart=${INSTALL_DIR}/mtg simple-run 0.0.0.0:${PORT} ${SECRET}
 Restart=always
 RestartSec=5
 LimitNOFILE=65536
