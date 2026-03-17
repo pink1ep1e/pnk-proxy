@@ -16,7 +16,7 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 PORT=${1:-443}
-DOMAIN=${2:-"www.google.com"}
+DOMAIN=${2:-"vk.ru"}
 INSTALL_DIR="/opt/pnk-proxy"
 SERVICE_NAME="pnk-proxy"
 
