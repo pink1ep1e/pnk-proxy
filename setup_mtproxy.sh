@@ -2,7 +2,6 @@
 # ============================================
 #   PNK Telegram Proxy — Auto Setup
 #   Совместимость: Ubuntu 20.04 / 22.04 / Debian
-#   © PNK Telegram Proxy
 # ============================================
 
 set -e
@@ -101,29 +100,53 @@ if is_valid_mtg "$INSTALL_DIR/mtg"; then
   DOWNLOADED=1
 fi
 
-# ── Шаг 1: скачать готовый бинарник с зеркал ──
+# ── Шаг 1: скачать готовый бинарник ──────────
 if [[ $DOWNLOADED -eq 0 ]]; then
   echo -e "${BPINK}[→] Пробую скачать готовый бинарник...${NC}"
+
+  # PNK_REPO — бинарник лежит прямо в нашем репозитории (работает без VPN в РФ)
+  PNK_REPO="https://raw.githubusercontent.com/pink1ep1e/pnk-proxy/main/mtg-2.1.7-linux-${MTG_ARCH}.tar.gz"
+
   MIRRORS=(
+    "$PNK_REPO"
     "https://github.com/9seconds/mtg/releases/download/${MTG_TARGET_VERSION}/mtg-linux-${MTG_ARCH}"
     "https://ghproxy.com/https://github.com/9seconds/mtg/releases/download/${MTG_TARGET_VERSION}/mtg-linux-${MTG_ARCH}"
     "https://mirror.ghproxy.com/https://github.com/9seconds/mtg/releases/download/${MTG_TARGET_VERSION}/mtg-linux-${MTG_ARCH}"
-    "https://gh.api.99988866.xyz/https://github.com/9seconds/mtg/releases/download/${MTG_TARGET_VERSION}/mtg-linux-${MTG_ARCH}"
   )
+
   for MIRROR in "${MIRRORS[@]}"; do
-    echo -e "${BPINK}[→] $(echo "$MIRROR" | cut -c1-58)...${NC}"
-    wget -q --timeout=25 --tries=2 -O "$INSTALL_DIR/mtg.tmp" "$MIRROR" 2>/dev/null || true
-    if [[ -s "$INSTALL_DIR/mtg.tmp" ]] && file "$INSTALL_DIR/mtg.tmp" | grep -q "ELF"; then
-      mv "$INSTALL_DIR/mtg.tmp" "$INSTALL_DIR/mtg"
-      chmod +x "$INSTALL_DIR/mtg"
-      if is_valid_mtg "$INSTALL_DIR/mtg"; then
-        echo -e "${GREEN}[✓] Бинарник скачан: $("$INSTALL_DIR/mtg" --version 2>/dev/null)${NC}"
-        DOWNLOADED=1
-        break
-      fi
+    echo -e "${BPINK}[→] $(echo "$MIRROR" | cut -c1-62)...${NC}"
+    TMPFILE="$INSTALL_DIR/mtg.tmp"
+    wget -q --timeout=30 --tries=2 -O "$TMPFILE" "$MIRROR" 2>/dev/null || true
+
+    if [[ ! -s "$TMPFILE" ]]; then
+      echo -e "${RED}[✗] Пусто, пробую следующее...${NC}"
+      rm -f "$TMPFILE"; continue
     fi
-    rm -f "$INSTALL_DIR/mtg.tmp" "$INSTALL_DIR/mtg"
-    echo -e "${RED}[✗] Не удалось, пробую следующее...${NC}"
+
+    # Если скачали .tar.gz — распаковываем
+    if file "$TMPFILE" | grep -q "gzip\|tar"; then
+      tar -xzf "$TMPFILE" -C "$INSTALL_DIR" 2>/dev/null || true
+      rm -f "$TMPFILE"
+      # Ищем бинарник mtg после распаковки
+      MTG_BIN=$(find "$INSTALL_DIR" -maxdepth 2 -name "mtg" -type f 2>/dev/null | head -1)
+      [[ -n "$MTG_BIN" && "$MTG_BIN" != "$INSTALL_DIR/mtg" ]] && mv "$MTG_BIN" "$INSTALL_DIR/mtg"
+    elif file "$TMPFILE" | grep -q "ELF"; then
+      mv "$TMPFILE" "$INSTALL_DIR/mtg"
+    else
+      echo -e "${RED}[✗] Неизвестный формат файла, пробую следующее...${NC}"
+      rm -f "$TMPFILE"; continue
+    fi
+
+    chmod +x "$INSTALL_DIR/mtg" 2>/dev/null || true
+    if is_valid_mtg "$INSTALL_DIR/mtg"; then
+      echo -e "${GREEN}[✓] Бинарник готов: $("$INSTALL_DIR/mtg" --version 2>/dev/null)${NC}"
+      DOWNLOADED=1
+      break
+    fi
+
+    rm -f "$INSTALL_DIR/mtg"
+    echo -e "${RED}[✗] Бинарник не прошёл проверку, пробую следующее...${NC}"
   done
 fi
 
@@ -155,19 +178,29 @@ if [[ $DOWNLOADED -eq 0 ]]; then
 
   if [[ $GO_OK -eq 1 ]]; then
     export GOPATH="/tmp/gopath-mtg"
-    export GOBIN="$INSTALL_DIR"
     export PATH="$PATH:/usr/local/go/bin"
     export GOPROXY="https://goproxy.cn,https://goproxy.io,direct"
     export GONOSUMCHECK="*"
     export GOFLAGS="-mod=mod"
+    mkdir -p "$GOPATH"
 
     echo -e "${BPINK}[→] Компилирую mtg ${MTG_TARGET_VERSION} (2–5 мин)...${NC}"
-    # Устанавливаем строго v2.1.7, бинарник попадёт в $GOBIN/mtg
+    # Сброс GOBIN чтобы go install клал бинарник в $GOPATH/bin
+    unset GOBIN
     if go install "github.com/9seconds/mtg/v2@${MTG_TARGET_VERSION}" 2>&1 | tail -3; then
-      chmod +x "$INSTALL_DIR/mtg" 2>/dev/null || true
-      if is_valid_mtg "$INSTALL_DIR/mtg"; then
-        DOWNLOADED=1
-        echo -e "${GREEN}[✓] Скомпилировано: $("$INSTALL_DIR/mtg" --version 2>/dev/null)${NC}"
+      # Бинарник может называться 'mtg' или 'v2' — ищем оба варианта
+      MTG_BIN=$(find "$GOPATH/bin" /root/go/bin "$HOME/go/bin" \
+                     -maxdepth 2 \( -name "mtg" -o -name "v2" \) \
+                     -type f 2>/dev/null | head -1)
+      if [[ -n "$MTG_BIN" && -x "$MTG_BIN" ]]; then
+        cp "$MTG_BIN" "$INSTALL_DIR/mtg"
+        chmod +x "$INSTALL_DIR/mtg"
+        # Проверяем — принимаем любую рабочую v2 сборку
+        if "$INSTALL_DIR/mtg" simple-run --help &>/dev/null || \
+           "$INSTALL_DIR/mtg" --help 2>&1 | grep -q "simple-run"; then
+          DOWNLOADED=1
+          echo -e "${GREEN}[✓] Скомпилировано и проверено${NC}"
+        fi
       fi
     fi
     rm -rf /tmp/gopath-mtg
