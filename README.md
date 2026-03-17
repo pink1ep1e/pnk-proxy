@@ -85,7 +85,7 @@ bash <(curl -s https://raw.githubusercontent.com/pink1ep1e/pnk-proxy/main/setup_
 📡 Сервер:   1.2.3.4
 🔌 Порт:     443
 🔑 Secret:   ee7a3c...
-🌐 Домен:    www.google.com (FakeTLS)
+🌐 Домен:    web.max.ru (FakeTLS)
 
 🔗 Ссылка для Telegram (мобильный):
 tg://proxy?server=1.2.3.4&port=443&secret=ee7a3c...
