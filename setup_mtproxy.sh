@@ -2,6 +2,7 @@
 # ============================================
 #   PNK Telegram Proxy — Auto Setup
 #   Совместимость: Ubuntu 20.04 / 22.04 / Debian
+#   © PNK Telegram Proxy
 # ============================================
 
 set -e
@@ -10,10 +11,15 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
-PINK='\033[0;35m'
-BPINK='\033[1;35m'
+WHITE='\033[1;37m'
+GRAY='\033[0;37m'
 BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
+
+# PNK = чёрный бренд → белый/светлый на тёмном терминале
+BPINK='\033[1;37m'
+PINK='\033[0;37m'
 
 PORT=${1:-443}
 DOMAIN=${2:-"vk.ru"}
@@ -75,13 +81,62 @@ apt-get install -y -qq wget curl ufw 2>/dev/null || true
 echo -e "${BPINK}[→] Скачиваю движок прокси...${NC}"
 mkdir -p "$INSTALL_DIR"
 
-MTG_URL="https://github.com/9seconds/mtg/releases/latest/download/mtg-linux-${MTG_ARCH}"
+# Получаем последнюю версию
+MTG_VERSION_TAG=$(curl -s --max-time 10 https://api.github.com/repos/9seconds/mtg/releases/latest \
+  | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+# Если API недоступен — используем известную стабильную версию
+MTG_VERSION_TAG=${MTG_VERSION_TAG:-"v2.1.7"}
+echo -e "${BPINK}[→] Версия: $MTG_VERSION_TAG${NC}"
 
-wget -q --show-progress -O "$INSTALL_DIR/mtg" "$MTG_URL"
+# Зеркала для скачивания (на случай блокировки GitHub в РФ)
+MIRRORS=(
+  "https://github.com/9seconds/mtg/releases/download/${MTG_VERSION_TAG}/mtg-linux-${MTG_ARCH}"
+  "https://ghproxy.com/https://github.com/9seconds/mtg/releases/download/${MTG_VERSION_TAG}/mtg-linux-${MTG_ARCH}"
+  "https://gh.api.99988866.xyz/https://github.com/9seconds/mtg/releases/download/${MTG_VERSION_TAG}/mtg-linux-${MTG_ARCH}"
+  "https://mirror.ghproxy.com/https://github.com/9seconds/mtg/releases/download/${MTG_VERSION_TAG}/mtg-linux-${MTG_ARCH}"
+)
+
+DOWNLOADED=0
+for MIRROR in "${MIRRORS[@]}"; do
+  echo -e "${BPINK}[→] Пробую: $(echo $MIRROR | cut -c1-60)...${NC}"
+  if wget -q --timeout=20 --tries=2 --show-progress \
+       -O "$INSTALL_DIR/mtg" "$MIRROR" 2>/dev/null; then
+    # Проверяем что файл не пустой и является ELF бинарником
+    if [[ -s "$INSTALL_DIR/mtg" ]] && file "$INSTALL_DIR/mtg" 2>/dev/null | grep -q "ELF"; then
+      DOWNLOADED=1
+      echo -e "${GREEN}[✓] Скачано успешно${NC}"
+      break
+    else
+      echo -e "${RED}[✗] Файл повреждён, пробую следующее зеркало...${NC}"
+      rm -f "$INSTALL_DIR/mtg"
+    fi
+  else
+    echo -e "${RED}[✗] Недоступно, пробую следующее зеркало...${NC}"
+    rm -f "$INSTALL_DIR/mtg"
+  fi
+done
+
+if [[ $DOWNLOADED -eq 0 ]]; then
+  echo -e "${RED}"
+  echo "  [!] Не удалось скачать движок ни с одного зеркала."
+  echo "  Вероятно, GitHub заблокирован на этом сервере."
+  echo ""
+  echo "  Решения:"
+  echo "  1) Установите вручную на сервере:"
+  echo "     apt-get install -y golang-go"
+  echo "     go install github.com/9seconds/mtg/v2@latest"
+  echo "     cp ~/go/bin/mtg $INSTALL_DIR/mtg"
+  echo ""
+  echo "  2) Скачайте на другой машине и загрузите на сервер:"
+  echo "     scp mtg-linux-amd64 root@${SERVER_IP}:${INSTALL_DIR}/mtg"
+  echo -e "${NC}"
+  exit 1
+fi
+
 chmod +x "$INSTALL_DIR/mtg"
 
-MTG_VERSION=$("$INSTALL_DIR/mtg" --version 2>/dev/null | head -1 || echo "unknown")
-echo -e "${GREEN}[✓] Движок установлен: $MTG_VERSION${NC}"
+MTG_VER=$("$INSTALL_DIR/mtg" --version 2>/dev/null | head -1 || echo "unknown")
+echo -e "${GREEN}[✓] Движок установлен: $MTG_VER${NC}"
 
 # ── Generate FakeTLS secret ──────────────────
 echo -e "${BPINK}[→] Генерирую FakeTLS secret (маскировка под $DOMAIN)...${NC}"
@@ -150,7 +205,7 @@ HTTPS_LINK="https://t.me/proxy?server=${SERVER_IP}&port=${PORT}&secret=${SECRET}
 
 echo ""
 echo -e "${BPINK}${BOLD}╔══════════════════════════════════════════════════════╗${NC}"
-echo -e "${BPINK}${BOLD}║         💜  PNK PROXY ГОТОВ К РАБОТЕ  💜            ║${NC}"
+echo -e "${BPINK}${BOLD}║         ◼  PNK PROXY ГОТОВ К РАБОТЕ  ◼            ║${NC}"
 echo -e "${BPINK}${BOLD}╚══════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${BOLD}📡 Сервер:${NC}   $SERVER_IP"
