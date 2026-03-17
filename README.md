@@ -1,4 +1,4 @@
-# ◼ PNK Telegram Proxy
+# 💎 PNK Telegram Proxy
 
 MTProto FakeTLS прокси для Telegram — автоматическая установка одной командой на любой Linux-сервер.
 
