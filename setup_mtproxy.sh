@@ -21,7 +21,7 @@ BPINK='\033[1;37m'
 PINK='\033[0;37m'
 
 PORT=${1:-443}
-DOMAIN=${2:-"web.max.ru"}
+DOMAIN=${2:-"vk.com"}
 INSTALL_DIR="/opt/pnk-proxy"
 SERVICE_NAME="pnk-proxy"
 
